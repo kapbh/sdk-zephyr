@@ -484,7 +484,6 @@ void reg_change_callbk_fn(void *vif_ctx,
 	fmac_dev_ctx->reg_set_status = true;
 }
 #endif /* !CONFIG_NRF70_RADIO_TEST */
-
 /* DTS uses 1dBm as the unit for TX power, while the RPU uses 0.25dBm */
 #define MAX_TX_PWR(label) DT_PROP(DT_NODELABEL(nrf70), label) * 4
 
@@ -772,7 +771,7 @@ static int nrf_wifi_drv_main_zep(const struct device *dev)
 	rpu_drv_priv_zep.fmac_priv = nrf_wifi_fmac_init(&data_config,
 							rx_buf_pools,
 							&callbk_fns);
-#else /* !CONFIG_NRF70_RADIO_TEST */
+#elif CONFIG_NRF70_RADIO_TEST
 	enum nrf_wifi_status status = NRF_WIFI_STATUS_FAIL;
 
 	/* The OSAL layer needs to be initialized before any other initialization
@@ -933,9 +932,9 @@ DEVICE_DT_INST_DEFINE(0,
 	      NULL, /* pm_action_cb */
 #ifndef CONFIG_NRF70_RADIO_TEST
 	      &rpu_drv_priv_zep, /* data */
-#else /* !CONFIG_NRF70_RADIO_TEST */
+#else /* CONFIG_NRF70_RADIO_TEST */
 	      NULL,
-#endif /* CONFIG_NRF70_RADIO_TEST */
+#endif /* !CONFIG_NRF70_RADIO_TEST */
 	      NULL, /* cfg */
 	      POST_KERNEL,
 	      CONFIG_WIFI_INIT_PRIORITY, /* prio */
