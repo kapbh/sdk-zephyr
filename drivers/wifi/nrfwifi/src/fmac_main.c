@@ -928,7 +928,11 @@ ETH_NET_DEVICE_DT_INST_DEFINE(0,
 		    CONFIG_NRF_WIFI_IFACE_MTU); /*mtu */
 #else
 DEVICE_DT_INST_DEFINE(0,
+#ifndef CONFIG_NRF70_OFFLOADED_RAW_TX
 	      nrf_wifi_drv_main_zep, /* init_fn */
+#else
+	      nrf70_off_raw_tx_init, /* init_fn */
+#endif
 	      NULL, /* pm_action_cb */
 #ifndef CONFIG_NRF70_RADIO_TEST
 	      &rpu_drv_priv_zep, /* data */
