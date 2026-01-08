@@ -53,7 +53,7 @@ static struct k_heap * const wifi_ctrl_pool = &wifi_drv_ctrl_mem_pool;
 static struct k_heap * const wifi_data_pool = &wifi_drv_data_mem_pool;
 #endif /* CONFIG_NRF_WIFI_GLOBAL_HEAP */
 
-#define WORD_SIZE 4
+#define WORD_SIZE 8
 
 struct zep_shim_intr_priv *intr_priv;
 
@@ -69,6 +69,13 @@ static void *zep_shim_data_mem_alloc(size_t size)
 	size_t size_aligned = ROUND_UP(size, 4);
 
 	return k_heap_aligned_alloc(wifi_data_pool, WORD_SIZE, size_aligned, K_FOREVER);
+}
+
+static void *zep_shim_data_mem_alloc_align(size_t size, size_t align)
+{
+	size_t size_aligned = ROUND_UP(size, align);
+
+	return k_heap_aligned_alloc(wifi_data_pool, align, size_aligned, K_FOREVER);
 }
 
 static void *zep_shim_mem_zalloc(size_t size)
@@ -102,6 +109,26 @@ static void *zep_shim_data_mem_zalloc(size_t size)
 	}
 
 	ret = zep_shim_data_mem_alloc(bounds);
+	if (ret != NULL) {
+		(void)memset(ret, 0, bounds);
+	}
+
+	return ret;
+}
+
+
+static void *zep_shim_data_mem_zalloc_align(size_t size, size_t align)
+{
+	void *ret;
+	size_t bounds;
+
+	size_t size_aligned = ROUND_UP(size, align);
+
+	if (size_mul_overflow(size_aligned, sizeof(char), &bounds)) {
+		return NULL;
+	}
+
+	ret = zep_shim_data_mem_alloc_align(bounds, align);
 	if (ret != NULL) {
 		(void)memset(ret, 0, bounds);
 	}
@@ -303,7 +330,7 @@ static void *zep_shim_nbuf_alloc(unsigned int size)
 {
 	struct nwb *nbuff;
 
-	nbuff = (struct nwb *)zep_shim_data_mem_zalloc(sizeof(struct nwb));
+	nbuff = (struct nwb *)zep_shim_data_mem_zalloc_align(sizeof(struct nwb), 8);
 
 	if (!nbuff) {
 		return NULL;
