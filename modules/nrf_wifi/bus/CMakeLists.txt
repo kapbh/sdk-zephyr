@@ -57,5 +57,6 @@ if (CONFIG_NRF70_BUSLIB)
     ipc_if.c
     ipc_service.c
     spsc_qm.c
+    gdram_buffers.c
   )
 endif()
