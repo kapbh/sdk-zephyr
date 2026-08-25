@@ -237,6 +237,7 @@ static void nrf_wifi_net_iface_work_handler(struct k_work *work)
 	struct nrf_wifi_vif_ctx_zep *vif_ctx_zep = CONTAINER_OF(work,
 								struct nrf_wifi_vif_ctx_zep,
 								nrf_wifi_net_iface_work);
+	bool operational;
 
 	if (!vif_ctx_zep) {
 		LOG_ERR("%s: vif_ctx_zep is NULL", __func__);
@@ -248,17 +249,25 @@ static void nrf_wifi_net_iface_work_handler(struct k_work *work)
 		return;
 	}
 
-	if (vif_ctx_zep->if_carr_state == NRF_WIFI_FMAC_IF_CARR_STATE_ON) {
-		/* For STA mode, keep the interface dormant on association and only
-		 * clear it once the controlled port is authorized (see
-		 * nrf_wifi_wpa_set_supp_port). This withholds data TX during the
-		 * 802.1X handshake window while EAPOL still flows out-of-band via
-		 * the control port (nrf_wifi_wpa_tx_control_port).
-		 */
-		if (vif_ctx_zep->if_type != NRF_WIFI_IFTYPE_STATION) {
-			net_if_dormant_off(vif_ctx_zep->zep_net_if_ctx);
-		}
-	} else if (vif_ctx_zep->if_carr_state == NRF_WIFI_FMAC_IF_CARR_STATE_OFF) {
+	/* A station must not go operational on association alone: that would let
+	 * the IP stack transmit during the 802.1X handshake, which the TX path
+	 * then has to drop. EAPOL flows out-of-band via
+	 * nrf_wifi_wpa_tx_control_port(), so wait for the controlled port.
+	 * Other interface types only depend on the carrier.
+	 */
+	operational = (vif_ctx_zep->if_carr_state == NRF_WIFI_FMAC_IF_CARR_STATE_ON) &&
+		      (vif_ctx_zep->if_type != NRF_WIFI_IFTYPE_STATION ||
+		       vif_ctx_zep->authorized);
+#ifdef CONFIG_NRF70_RAW_DATA_TX
+	/* Raw TX injection has neither association nor controlled port, so it
+	 * needs the interface operational for the socket layer to accept frames.
+	 */
+	operational = operational || vif_ctx_zep->tx_injection_active;
+#endif /* CONFIG_NRF70_RAW_DATA_TX */
+
+	if (operational) {
+		net_if_dormant_off(vif_ctx_zep->zep_net_if_ctx);
+	} else {
 		net_if_dormant_on(vif_ctx_zep->zep_net_if_ctx);
 	}
 }
@@ -1255,6 +1264,9 @@ int nrf_wifi_if_set_config_zep(const struct device *dev,
 	struct nrf_wifi_fmac_dev_ctx *fmac_dev_ctx = NULL;
 	struct nrf_wifi_sys_fmac_dev_ctx *sys_dev_ctx = NULL;
 	int ret = -1;
+#ifdef CONFIG_NRF70_RAW_DATA_TX
+	bool refresh_dormant = false;
+#endif
 
 	if (!dev) {
 		LOG_ERR("%s: Invalid parameters",
@@ -1313,7 +1325,7 @@ int nrf_wifi_if_set_config_zep(const struct device *dev,
 		    config->txinjection_mode) {
 			LOG_INF("%s: Driver TX injection setting is same as configured setting",
 				__func__);
-			goto unlock;
+			goto tx_injection_done;
 		}
 		/**
 		 * Since UMAC wishes to use the same mode command as previously
@@ -1336,6 +1348,12 @@ int nrf_wifi_if_set_config_zep(const struct device *dev,
 			LOG_ERR("%s: Mode set operation failed", __func__);
 			goto unlock;
 		}
+
+tx_injection_done:
+		vif_ctx_zep->tx_injection_active = config->txinjection_mode;
+		refresh_dormant = true;
+		ret = 0;
+		goto unlock;
 	}
 #endif
 #ifdef CONFIG_NRF70_PROMISC_DATA_RX
@@ -1369,6 +1387,11 @@ int nrf_wifi_if_set_config_zep(const struct device *dev,
 	ret = 0;
 unlock:
 	k_mutex_unlock(&vif_ctx_zep->vif_lock);
+#ifdef CONFIG_NRF70_RAW_DATA_TX
+	if (refresh_dormant) {
+		k_work_submit(&vif_ctx_zep->nrf_wifi_net_iface_work);
+	}
+#endif
 out:
 	return ret;
 }

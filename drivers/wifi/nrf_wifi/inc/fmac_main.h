@@ -74,6 +74,9 @@ struct nrf_wifi_vif_ctx_zep {
 #if defined(CONFIG_NRF70_STA_MODE) || defined(CONFIG_NRF70_RAW_DATA_TX)
 	bool authorized;
 #endif
+#ifdef CONFIG_NRF70_RAW_DATA_TX
+	bool tx_injection_active;
+#endif
 #ifdef CONFIG_NRF70_STA_MODE
 	unsigned int assoc_freq;
 	enum nrf_wifi_fmac_if_carr_state if_carr_state;
